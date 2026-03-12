@@ -142,7 +142,7 @@
 
 ## 9. 参考来源
 
-- Amazon 公开可检索商品页信息：`https://www.amazon.com/KAITION-Stainless-Steel-Garlic-Press/dp/B0CGTXLRW2`
+- Amazon 德国站商品链接：`https://www.amazon.de/dp/B0CGTXLRW2`
 - 公开网络检索结果中的 KAITION 蒜泥器商品标题与卖点摘要
 
 > 注：由于当前环境无法直接稳定抓取 Amazon.de 商品详情页，以上内容更适合作为运营分析底稿；如需正式上架文案，建议补充后台导出的真实标题、五点、A+、评论词频与竞品对比数据。
