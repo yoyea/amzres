@@ -1,9 +1,9 @@
-# 亚马逊德国/欧洲站商品分析机器人 — 小龙虾多功能配置方案
+# 亚马逊多站点商品分析机器人 — 主龙虾 / 小龙虾配置方案
 
-> **运行环境**：腾讯云 4核 8G 120GB SSD · 1500G流量包 · 10M带宽 · Linux  
-> **模型套餐**：腾讯云 Coding Plan  
-> **通道**：飞书（Feishu / Lark）  
-> **目标站点**：Amazon.de（DE）及欧洲站（UK、FR、NL、SE、PL、ES、TR、BE、IE）
+> **运行环境**：腾讯云 4核 8G 120GB SSD · 1500G流量包 · 10M带宽 · Linux
+> **模型资源**：支持 Tencent hy 2.0、hunyuan、minimax、kimi-k2.5、glm-5
+> **通道**：飞书（Feishu / Lark）
+> **目标站点**：德国（DE）、法国（FR）、英国（UK）、西班牙（ES）、意大利（IT）、美国（US）
 
 ---
 
@@ -16,24 +16,52 @@
 飞书机器人（Webhook 接收 / 主动推送）
    │
    ▼
-小龙虾调度中心（腾讯云 Linux 主机）
-   ├── Agent 1：当前产品数据分析
-   ├── Agent 2：同类竞品对比
-   ├── Agent 3：Listing 优化建议
-   ├── Agent 4：类目市场研究 & 选品评分
-   └── Agent 5：定时报告 & 预警
+主龙虾协调器（Master Lobster）
+   ├── 小龙虾 1：当前产品数据分析
+   ├── 小龙虾 2：同类竞品对比
+   ├── 小龙虾 3：Listing 优化建议
+   ├── 小龙虾 4：类目市场研究 & 选品评分
+   └── 小龙虾 5：定时报告 & 预警
 ```
 
-所有 Agent 共用同一套数据采集层（Amazon DE/EU API + Keepa + Jungle Scout 等），
-结果通过飞书卡片消息或富文本推送给用户。
+主龙虾是唯一对外通信入口：负责接收飞书消息、拆解任务、聚合结果，并统一向你回消息。
+所有小龙虾都只与主龙虾通信，不直接响应用户，也不彼此直连；需要协作时，由主龙虾负责转发上下文与汇总结论。
+
+数据采集层继续复用 Amazon SP-API、Keepa、Jungle Scout、Helium10 等授权数据源，但改为按小龙虾职责拆分脚本化采集任务：
+- **脚本型小龙虾**：通过脚本调用官方或授权 API 获取结构化数据，再把结果回传给主龙虾。
+- **推理型小龙虾**：基于主龙虾下发的上下文与本地素材做内容优化和总结。
 
 ---
 
-## 二、各 Agent 功能定义
+## 二、主龙虾与各小龙虾功能定义
 
-### Agent 1 — 当前产品数据分析（`product_analysis`）
+### 主龙虾 — 统一入口与编排（`master_lobster`）
+
+**职责**
+
+1. 接收飞书用户指令并识别站点（DE / FR / UK / ES / IT / US）
+2. 将任务拆分给一个或多个小龙虾执行
+3. 控制小龙虾之间不直连，只允许向主龙虾上报结果
+4. 聚合脚本采集结果、模型推理结果与缓存数据
+5. 统一输出飞书卡片、日报、预警和多步追问
+
+### 小龙虾编排总表
+
+| 小龙虾 | 标识符 | 默认模型 | 数据获取方式 | 通信规则 |
+|---|---|---|---|---|
+| 小龙虾 1 | `product_analysis` | `tencent-hy-2.0` | 脚本调用 SP-API / Keepa | 仅向主龙虾回传 |
+| 小龙虾 2 | `competitor_comparison` | `minimax` | 脚本调用竞品与关键词接口 | 仅向主龙虾回传 |
+| 小龙虾 3 | `listing_optimizer` | `kimi-k2.5` | 基于主龙虾下发上下文推理 | 仅向主龙虾回传 |
+| 小龙虾 4 | `category_research` | `glm-5` | 脚本调用类目 / 搜索量接口 | 仅向主龙虾回传 |
+| 小龙虾 5 | `scheduled_reports` | `hunyuan` | 脚本汇总缓存、订阅与预警数据 | 仅向主龙虾回传 |
+
+> 如需调整，可为每个小龙虾单独指定 `Tencent hy 2.0`、`hunyuan`、`minimax`、`kimi-k2.5`、`glm-5` 中任一模型；主龙虾模型可独立配置，不受小龙虾限制。
+
+### 小龙虾 1 — 当前产品数据分析（`product_analysis`）
 
 **触发方式**：飞书指令 `/分析产品 <ASIN>` 或 `/pa <ASIN>`
+
+**脚本采集**：`scripts/fetch_product_metrics.py`
 
 **分析维度**
 
@@ -47,13 +75,15 @@
 | A+ 内容质量 | 图片数量、视频、EBC 模块完整度 |
 | 广告可见性 | Sponsored 曝光频次（需授权数据） |
 
-**输出**：飞书交互式卡片，含趋势折线图 + 文字摘要 + 优先行动建议。
+**输出**：小龙虾先回传结构化 JSON 给主龙虾，再由主龙虾生成飞书交互式卡片，含趋势折线图 + 文字摘要 + 优先行动建议。
 
 ---
 
-### Agent 2 — 同类竞品对比（`competitor_comparison`）
+### 小龙虾 2 — 同类竞品对比（`competitor_comparison`）
 
 **触发方式**：飞书指令 `/对比 <ASIN> [竞品ASIN1,竞品ASIN2,...]` 或 `/cc <ASIN>`（自动抓取 Top10 竞品）
+
+**脚本采集**：`scripts/fetch_competitor_data.py`
 
 **对比项目**
 
@@ -68,15 +98,15 @@
 | FBA/FBM 比例 | 竞品物流模式分布 |
 | 促销策略 | Coupon、Lightning Deal 频率 |
 
-**输出**：飞书多维表格卡片 + 雷达图（我方 vs. 竞品均值）+ 竞争优/劣势总结。
+**输出**：小龙虾回传竞品对比矩阵与图表数据，由主龙虾统一输出飞书多维表格卡片 + 雷达图（我方 vs. 竞品均值）+ 竞争优/劣势总结。
 
 ---
 
-### Agent 3 — Listing 优化建议（`listing_optimizer`）
+### 小龙虾 3 — Listing 优化建议（`listing_optimizer`）
 
 **触发方式**：飞书指令 `/优化 <ASIN> [语言代码]` 或 `/opt <ASIN> DE`
 
-**支持语言**：de-DE、en-GB、fr-FR、nl-NL、sv-SE、pl-PL、es-ES、tr-TR、fr-BE、nl-BE、en-IE
+**支持语言**：de-DE、fr-FR、en-GB、es-ES、it-IT、en-US
 
 **优化模块**
 
@@ -89,15 +119,17 @@
 | 图片建议 | 主图背景合规、场景图种类、尺寸及压缩比 |
 | 后端关键词 | 填充建议，避免重复标题已出现词 |
 
-**当前产品参考**（ASIN B0FCD14NB7）：本仓库 `localization_content.md` 已包含 DE / EU 各语言 Listing，优化建议将基于此文件内容进行差量对比。
+**当前产品参考**（ASIN B0FCD14NB7）：本仓库 `localization_content.md` 已包含 DE / FR / UK / ES / IT / US 六站点 Listing，优化建议将基于此文件内容进行差量对比。
 
-**输出**：飞书富文本消息，逐字段给出 "原文 → 优化建议 → 原因" 三栏对照表。
+**输出**：小龙虾回传逐字段优化草稿，由主龙虾统一生成飞书富文本消息，给出 "原文 → 优化建议 → 原因" 三栏对照表。
 
 ---
 
-### Agent 4 — 类目市场研究 & 选品评分（`category_research`）
+### 小龙虾 4 — 类目市场研究 & 选品评分（`category_research`）
 
 **触发方式**：飞书指令 `/选品 <类目关键词> [站点]` 或 `/cr Serviertablett DE`
+
+**脚本采集**：`scripts/fetch_category_signals.py`
 
 **分析流程**
 
@@ -118,13 +150,15 @@
 
 6. **Top 机会产品清单**：列出评分 ≥ 60 的产品，附 ASIN、当前排名、月销量估算、建议切入价格
 
-**输出**：飞书交互卡片，含评分雷达图 + 机会产品表格 + 类目进入建议报告。
+**输出**：小龙虾回传评分明细、候选产品与风险标签，由主龙虾生成飞书交互卡片，含评分雷达图 + 机会产品表格 + 类目进入建议报告。
 
 ---
 
-### Agent 5 — 定时报告 & 预警（`scheduled_reports`）
+### 小龙虾 5 — 定时报告 & 预警（`scheduled_reports`）
 
 **触发方式**：定时任务（Cron）+ 飞书主动推送；可在飞书订阅 `/订阅日报 <ASIN>` 或 `/订阅周报 <ASIN>`
+
+**脚本采集**：`scripts/build_report_snapshot.py`
 
 | 报告类型 | 频率 | 内容 |
 |---|---|---|
@@ -132,6 +166,8 @@
 | 周报 | 每周一 09:00 CET | 7天销量趋势、关键词排名变化、库存预警 |
 | 竞品预警 | 实时 | 竞品大幅降价（> 15%）、新竞品进入 Top 10、竞品库存清空 |
 | 合规预警 | 每月 1 日 | 欧盟法规更新（GPSR、REACH、电池法）对产品的影响评估 |
+
+小龙虾负责按订阅配置生成数据快照，主龙虾负责最终推送、异常降级与消息补发。
 
 ---
 
@@ -159,19 +195,26 @@ sudo usermod -aG docker $USER
 
 ```
 /home/ubuntu/amzbot/
+├── coordinator/
+│   └── master_lobster.py         # 主龙虾：统一入口、编排、聚合
 ├── agents/
-│   ├── product_analysis.py        # Agent 1
-│   ├── competitor_comparison.py   # Agent 2
-│   ├── listing_optimizer.py       # Agent 3
-│   ├── category_research.py       # Agent 4
-│   └── scheduled_reports.py       # Agent 5
+│   ├── product_analysis.py        # 小龙虾 1
+│   ├── competitor_comparison.py   # 小龙虾 2
+│   ├── listing_optimizer.py       # 小龙虾 3
+│   ├── category_research.py       # 小龙虾 4
+│   └── scheduled_reports.py       # 小龙虾 5
+├── scripts/
+│   ├── fetch_product_metrics.py   # 产品数据脚本采集
+│   ├── fetch_competitor_data.py   # 竞品数据脚本采集
+│   ├── fetch_category_signals.py  # 类目信号脚本采集
+│   └── build_report_snapshot.py   # 定时报告快照脚本
 ├── data/
 │   ├── listings/                  # 本地 Listing 缓存（含 localization_content.md）
 │   └── cache/                     # Redis 缓存持久化目录
 ├── config/
 │   ├── settings.yaml              # 主配置文件（见 3.3 节）
 │   └── feishu_credentials.yaml   # 飞书应用凭证（勿提交至 Git）
-├── dispatcher.py                  # 飞书消息路由分发器
+├── dispatcher.py                  # 飞书消息路由分发器（入口交给主龙虾）
 ├── scheduler.py                   # 定时任务调度器（APScheduler）
 └── requirements.txt
 ```
@@ -191,35 +234,79 @@ feishu:
   encrypt_key: "${FEISHU_ENCRYPT_KEY}"
   webhook_url: "https://<你的域名或IP>/feishu/webhook"
 
-tencent_coding:
-  api_key: "${TENCENT_CODING_API_KEY}"
-  # OpenAI 兼容接口地址：https://api.hunyuan.cloud.tencent.com/v1
-  # 模型标识符以腾讯云 Coding Plan 控制台显示为准，示例值：hunyuan-pro / hunyuan-standard
-  model: "hunyuan-pro"
-  max_tokens: 4096
-  temperature: 0.3                 # 分析类任务建议低温度
+llm:
+  providers:
+    tencent_hy_2_0:
+      api_key: "${TENCENT_HY_API_KEY}"
+      api_base: "${TENCENT_HY_API_BASE}"
+    hunyuan:
+      api_key: "${HUNYUAN_API_KEY}"
+      api_base: "https://api.hunyuan.cloud.tencent.com/v1"
+    minimax:
+      api_key: "${MINIMAX_API_KEY}"
+      api_base: "${MINIMAX_API_BASE}"
+    kimi_k2_5:
+      api_key: "${KIMI_API_KEY}"
+      api_base: "${KIMI_API_BASE}"
+    glm_5:
+      api_key: "${GLM_API_KEY}"
+      api_base: "${GLM_API_BASE}"
+  master_lobster:
+    model: "hunyuan"
+    max_tokens: 4096
+    temperature: 0.2
+  worker_lobsters:
+    product_analysis:
+      model: "tencent-hy-2.0"
+      collection_mode: "script"
+      collection_script: "scripts/fetch_product_metrics.py"
+    competitor_comparison:
+      model: "minimax"
+      collection_mode: "script"
+      collection_script: "scripts/fetch_competitor_data.py"
+    listing_optimizer:
+      model: "kimi-k2.5"
+      collection_mode: "context_only"
+    category_research:
+      model: "glm-5"
+      collection_mode: "script"
+      collection_script: "scripts/fetch_category_signals.py"
+    scheduled_reports:
+      model: "hunyuan"
+      collection_mode: "script"
+      collection_script: "scripts/build_report_snapshot.py"
 
 amazon:
   marketplaces:
     - id: "A1PA6795UKMFR9"        # Amazon.de
       locale: "de-DE"
+      region: "eu-west-1"
     - id: "A1F83G8C2ARO7P"        # Amazon.co.uk
       locale: "en-GB"
+      region: "eu-west-1"
     - id: "A13V1IB3VIYZZH"        # Amazon.fr
       locale: "fr-FR"
-    - id: "A1805IZSGTT6HS"        # Amazon.nl
-      locale: "nl-NL"
-    - id: "A2NODRKZP88ZB9"        # Amazon.se
-      locale: "sv-SE"
-    - id: "A1C3SOZRARQ6R3"        # Amazon.pl
-      locale: "pl-PL"
+      region: "eu-west-1"
     - id: "A1RKKUPIHCS9HS"        # Amazon.es
       locale: "es-ES"
+      region: "eu-west-1"
+    - id: "APJ6JRA9NG5V4"         # Amazon.it
+      locale: "it-IT"
+      region: "eu-west-1"
+    - id: "ATVPDKIKX0DER"         # Amazon.com
+      locale: "en-US"
+      region: "us-east-1"
   sp_api:
-    client_id: "${SP_API_CLIENT_ID}"
-    client_secret: "${SP_API_CLIENT_SECRET}"
-    refresh_token: "${SP_API_REFRESH_TOKEN}"
-    region: "eu-west-1"
+    eu:
+      client_id: "${SP_API_EU_CLIENT_ID}"
+      client_secret: "${SP_API_EU_CLIENT_SECRET}"
+      refresh_token: "${SP_API_EU_REFRESH_TOKEN}"
+      region: "eu-west-1"
+    na:
+      client_id: "${SP_API_NA_CLIENT_ID}"
+      client_secret: "${SP_API_NA_CLIENT_SECRET}"
+      refresh_token: "${SP_API_NA_REFRESH_TOKEN}"
+      region: "us-east-1"
 
 data_sources:
   keepa_api_key: "${KEEPA_API_KEY}"
@@ -312,7 +399,7 @@ server {
 ```ini
 # /etc/systemd/system/amzbot.service
 [Unit]
-Description=Amazon DE/EU Analysis Bot
+Description=Amazon Multi-Market Analysis Bot
 After=network.target redis.service
 
 [Service]
@@ -348,16 +435,16 @@ sudo systemctl status amzbot
 
 | 指令 | Agent | 说明 |
 |---|---|---|
-| `/pa <ASIN>` | Agent 1 | 分析指定产品数据 |
-| `/分析产品 <ASIN>` | Agent 1 | 同上（中文全称） |
-| `/cc <ASIN>` | Agent 2 | 自动抓取 Top10 竞品对比 |
-| `/对比 <ASIN> <竞品1,...>` | Agent 2 | 手动指定竞品对比 |
-| `/opt <ASIN> <语言>` | Agent 3 | Listing 优化建议 |
-| `/优化 <ASIN>` | Agent 3 | 同上（中文全称） |
-| `/cr <类目词> [站点]` | Agent 4 | 类目研究 & 选品评分 |
-| `/选品 <类目词>` | Agent 4 | 同上（中文全称） |
-| `/订阅日报 <ASIN>` | Agent 5 | 订阅每日产品报告 |
-| `/订阅周报 <ASIN>` | Agent 5 | 订阅每周产品报告 |
+| `/pa <ASIN>` | 小龙虾 1（经主龙虾路由） | 分析指定产品数据 |
+| `/分析产品 <ASIN>` | 小龙虾 1（经主龙虾路由） | 同上（中文全称） |
+| `/cc <ASIN>` | 小龙虾 2（经主龙虾路由） | 自动抓取 Top10 竞品对比 |
+| `/对比 <ASIN> <竞品1,...>` | 小龙虾 2（经主龙虾路由） | 手动指定竞品对比 |
+| `/opt <ASIN> <语言>` | 小龙虾 3（经主龙虾路由） | Listing 优化建议 |
+| `/优化 <ASIN>` | 小龙虾 3（经主龙虾路由） | 同上（中文全称） |
+| `/cr <类目词> [站点]` | 小龙虾 4（经主龙虾路由） | 类目研究 & 选品评分 |
+| `/选品 <类目词>` | 小龙虾 4（经主龙虾路由） | 同上（中文全称） |
+| `/订阅日报 <ASIN>` | 小龙虾 5（经主龙虾路由） | 订阅每日产品报告 |
+| `/订阅周报 <ASIN>` | 小龙虾 5（经主龙虾路由） | 订阅每周产品报告 |
 | `/帮助` | — | 显示所有指令说明 |
 
 ---
@@ -366,12 +453,12 @@ sudo systemctl status amzbot
 
 | 组件 | CPU | 内存 | 备注 |
 |---|---|---|---|
-| 飞书消息分发器 | 0.5 核 | 256 MB | 常驻进程 |
-| Agent 1–4（按需） | 1–2 核 | 512 MB | 任务队列，并发 ≤ 2 |
+| 主龙虾协调器 + 飞书消息分发器 | 0.8 核 | 384 MB | 常驻进程 |
+| 小龙虾 1–4（按需） | 1–2 核 | 512 MB | 任务队列，并发 ≤ 2 |
 | 定时报告调度器 | 0.1 核 | 128 MB | 常驻轻量进程 |
 | Redis 缓存 | 0.1 核 | 256 MB | 数据缓存 |
 | Nginx | 0.1 核 | 64 MB | 反向代理 |
-| **合计** | **~4 核** | **~1.2 GB** | 4核8G 机器完全胜任 |
+| **合计** | **~4 核** | **~1.4 GB** | 4核8G 机器完全胜任 |
 
 ---
 
@@ -379,7 +466,7 @@ sudo systemctl status amzbot
 
 1. **凭证管理**：所有 API Key 及密钥通过 `.env` 文件注入，禁止硬编码，禁止提交至 Git。
 2. **飞书加密**：启用飞书事件订阅加密（`encrypt_key`），防止 Webhook 被伪造。
-3. **Amazon ToS**：数据采集严格使用官方 SP-API，禁止爬虫抓取 Amazon 页面，避免账户违规。
+3. **Amazon ToS**：脚本采集严格使用官方 SP-API、Keepa 或已授权接口，禁止爬虫抓取 Amazon 页面，避免账户违规。
 4. **欧盟 GDPR**：不收集、不存储买家个人信息；分析数据仅使用聚合统计口径。
 5. **数据备份**：每日凌晨 02:00 自动备份 Redis 数据到腾讯云 COS 对象存储。
 6. **访问控制**：飞书机器人仅对指定企业内部成员开放；服务器防火墙仅开放 80 / 443 / 22 端口。
