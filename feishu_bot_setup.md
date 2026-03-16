@@ -1,6 +1,6 @@
-# 飞书机器人配置指南 — 亚马逊分析小龙虾
+# 飞书机器人配置指南 — 亚马逊分析主龙虾 / 小龙虾
 
-本文档详细说明如何在飞书开放平台创建机器人应用，并将其与运行在腾讯云上的分析服务对接。
+本文档详细说明如何在飞书开放平台创建机器人应用，并将其与运行在腾讯云上的主龙虾 / 小龙虾分析服务对接。
 
 ---
 
@@ -37,14 +37,31 @@ FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 FEISHU_VERIFICATION_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 FEISHU_ENCRYPT_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# 腾讯云 Coding Plan（混元大模型兼容 OpenAI 接口）
-TENCENT_CODING_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# OpenAI 兼容接口地址：https://api.hunyuan.cloud.tencent.com/v1
+# 主龙虾 / 小龙虾模型配置
+TENCENT_HY_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TENCENT_HY_API_BASE=https://<tencent-hy-compatible-endpoint>/v1
+HUNYUAN_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+MINIMAX_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+MINIMAX_API_BASE=https://<minimax-compatible-endpoint>/v1
+KIMI_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+KIMI_API_BASE=https://<kimi-compatible-endpoint>/v1
+GLM_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+GLM_API_BASE=https://<glm-compatible-endpoint>/v1
+
+MASTER_LOBSTER_MODEL=hunyuan
+PRODUCT_ANALYSIS_MODEL=tencent-hy-2.0
+COMPETITOR_COMPARISON_MODEL=minimax
+LISTING_OPTIMIZER_MODEL=kimi-k2.5
+CATEGORY_RESEARCH_MODEL=glm-5
+SCHEDULED_REPORTS_MODEL=hunyuan
 
 # Amazon SP-API
-SP_API_CLIENT_ID=amzn1.application-oa2-client.xxxxxxxx
-SP_API_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-SP_API_REFRESH_TOKEN=Atzr|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SP_API_EU_CLIENT_ID=amzn1.application-oa2-client.eu.xxxxxxxx
+SP_API_EU_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SP_API_EU_REFRESH_TOKEN=Atzr|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SP_API_NA_CLIENT_ID=amzn1.application-oa2-client.na.xxxxxxxx
+SP_API_NA_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SP_API_NA_REFRESH_TOKEN=Atzr|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Keepa（价格历史数据）
 KEEPA_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -60,9 +77,12 @@ JUNGLE_SCOUT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ## 三、飞书消息卡片模板说明
 
-所有 Agent 回复均使用飞书**交互式消息卡片**（Card JSON），主要模板如下：
+所有分析结果均使用飞书**交互式消息卡片**（Card JSON），主要模板如下：
 
-### 3.1 产品分析卡片（Agent 1）
+> 说明：对外展示仍由主龙虾统一发送飞书卡片；小龙虾仅向主龙虾返回结构化结果。
+> `{{CURRENCY}}` 建议直接传入站点对应的显示符号或前缀（如 `€`、`£`、`$`），并默认与金额紧贴显示（如 `€25.99`、`$25.99`），以保证不同站点卡片渲染一致。
+
+### 3.1 产品分析卡片（小龙虾 1，经主龙虾统一发送）
 
 ```json
 {
@@ -76,7 +96,7 @@ JUNGLE_SCOUT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
       "tag": "div",
       "fields": [
         { "is_short": true, "text": { "tag": "lark_md", "content": "**当前 BSR**\n{{BSR_RANK}}" } },
-        { "is_short": true, "text": { "tag": "lark_md", "content": "**Buy Box 价格**\n€{{PRICE}}" } },
+        { "is_short": true, "text": { "tag": "lark_md", "content": "**Buy Box 价格**\n{{CURRENCY}}{{PRICE}}" } },
         { "is_short": true, "text": { "tag": "lark_md", "content": "**评论数**\n{{REVIEW_COUNT}}" } },
         { "is_short": true, "text": { "tag": "lark_md", "content": "**平均星级**\n{{STAR_RATING}} ⭐" } }
       ]
@@ -93,7 +113,7 @@ JUNGLE_SCOUT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 }
 ```
 
-### 3.2 选品评分卡片（Agent 4）
+### 3.2 选品评分卡片（小龙虾 4，经主龙虾统一发送）
 
 ```json
 {
@@ -125,6 +145,8 @@ JUNGLE_SCOUT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 | 团队协作 | 将机器人加入群聊，支持 `@机器人 /pa B0FCD14NB7` 格式 |
 | 自动定时报告 | 机器人主动向指定群或个人推送 |
 | 移动端使用 | 飞书手机 App 完整支持卡片交互 |
+
+推荐将飞书机器人只绑定到主龙虾入口服务：所有用户消息先到主龙虾，再由主龙虾按任务路由到对应小龙虾，避免小龙虾直接暴露在飞书事件入口。
 
 ---
 
