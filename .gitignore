@@ -1,0 +1,27 @@
+# 环境变量 / 密钥文件（绝对不可提交）
+.env
+.env.*
+config/feishu_credentials.yaml
+config/*_credentials.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# 日志
+*.log
+/var/log/
+
+# 缓存
+.cache/
+data/cache/
+
+# 系统文件
+.DS_Store
+Thumbs.db
